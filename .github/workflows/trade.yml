@@ -2,8 +2,8 @@ name: Congressional Trade Bot
 
 on:
   schedule:
-    - cron: '0 9 * * 1-5'    # 9:00 AM ET, Monday–Friday (market open)
-    - cron: '30 15 * * 1-5'  # 3:30 PM ET, Monday–Friday (before market close)
+    - cron: '30 13 * * 1-5'  # 9:30 AM ET (UTC-4), Monday–Friday (market open)
+    - cron: '30 19 * * 1-5'  # 3:30 PM ET (UTC-4), Monday–Friday (before market close)
   workflow_dispatch:          # allow manual trigger from GitHub UI
 
 jobs:
