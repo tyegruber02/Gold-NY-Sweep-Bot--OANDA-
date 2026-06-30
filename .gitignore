@@ -1,0 +1,8 @@
+venv/
+.env
+bot_state.json
+quiver_trades.json
+price_cache.json
+__pycache__/
+*.pyc
+.DS_Store
