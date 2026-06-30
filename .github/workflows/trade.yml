@@ -28,8 +28,9 @@ jobs:
           path: |
             bot_state.json
             price_cache.json
-          key: bot-state-${{ runner.os }}
+          key: bot-state-${{ runner.os }}-${{ hashFiles('bot_state.json') }}
           restore-keys: |
+            bot-state-${{ runner.os }}-
             bot-state-
 
       - name: Run bot
