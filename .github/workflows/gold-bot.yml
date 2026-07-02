@@ -1,18 +1,17 @@
 name: Gold NY-Sweep Bot
 
 on:
-  # Run every hour during Asia session hours (22:00–06:00 UTC = 17:00–01:00 ET)
-  # Also runs at 17:00 ET (21:00 UTC) to catch the session open
+  # Every hour during Asia session (22:00–06:00 UTC = 17:00–01:00 ET)
   schedule:
     - cron: '0 21,22,23,0,1,2,3,4,5,6 * * *'
-  # Manual trigger from GitHub UI — useful for testing
+  # Manual trigger for testing
   workflow_dispatch:
 
 jobs:
   run-gold-bot:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # needed to commit state back to repo
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -26,24 +25,20 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install oandapyV20 pandas numpy pytz
+        run: pip install alpaca-py yfinance pandas numpy pytz
 
-      - name: Run gold bot (single hourly check)
+      - name: Run gold bot
         env:
-          OANDA_API_KEY:    ${{ secrets.OANDA_API_KEY }}
-          OANDA_ACCOUNT_ID: ${{ secrets.OANDA_ACCOUNT_ID }}
-          OANDA_ENV:        practice
-          PAPER_MODE:       "true"
-          ACCOUNT_SIZE:     "100000"
-          RISK_HIGH:        "0.05"
-          RISK_LOW:         "0.03"
-        run: python3 gold_bot_runner.py
+          ALPACA_API_KEY_GOLD:    ${{ secrets.ALPACA_API_KEY_GOLD }}
+          ALPACA_SECRET_KEY_GOLD: ${{ secrets.ALPACA_SECRET_KEY_GOLD }}
+          GOLD_PAPER_MODE:        "true"
+        run: python3 gold_bot.py
 
-      - name: Commit gold bot state and trade log back to repo
+      - name: Commit state and trade log
         if: always()
         run: |
           git config user.name  "Gold Bot"
           git config user.email "bot@github-actions"
           git add gold_bot_state.json gold_trade_log.json || true
-          git diff --cached --quiet || git commit -m "gold-bot: state + trades $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git diff --cached --quiet || git commit -m "gold-bot: $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push || true
