@@ -32,6 +32,6 @@ PAPER_MODE = True
 ALERT_EMAIL = ""
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-LOG_FILE   = "bot.log"
-TRADE_LOG  = "trade_log.json"
-STATE_FILE = "bot_state.json"
+LOG_FILE   = "gold_bot.log"
+TRADE_LOG  = "gold_trade_log.json"
+STATE_FILE = "gold_bot_state.json"

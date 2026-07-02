@@ -9,7 +9,7 @@ from pathlib import Path
 import config as cfg
 
 def load():
-    p = Path(cfg.TRADE_LOG)
+    p = Path("gold_trade_log.json")
     if not p.exists():
         print("No trade log found yet. Bot hasn't fired a signal.")
         sys.exit(0)

@@ -39,11 +39,11 @@ jobs:
           RISK_LOW:         "0.03"
         run: python3 gold_bot_runner.py
 
-      - name: Commit state and trade log back to repo
+      - name: Commit gold bot state and trade log back to repo
         if: always()
         run: |
           git config user.name  "Gold Bot"
           git config user.email "bot@github-actions"
-          git add bot_state.json trade_log.json || true
-          git diff --cached --quiet || git commit -m "bot: state + trades $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git add gold_bot_state.json gold_trade_log.json || true
+          git diff --cached --quiet || git commit -m "gold-bot: state + trades $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push || true

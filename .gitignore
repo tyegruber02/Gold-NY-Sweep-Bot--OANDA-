@@ -1,6 +1,8 @@
 venv/
 .env
-# bot_state.json is intentionally tracked — GitHub Actions needs it for session persistence
+bot_state.json
+trade_log.json
+# gold_bot_state.json and gold_trade_log.json are intentionally tracked — GitHub Actions needs them for persistence
 quiver_trades.json
 price_cache.json
 __pycache__/

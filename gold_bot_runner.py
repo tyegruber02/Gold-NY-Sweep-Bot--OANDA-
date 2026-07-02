@@ -28,8 +28,8 @@ RISK_HIGH        = float(os.environ.get("RISK_HIGH", "0.05"))
 RISK_LOW         = float(os.environ.get("RISK_LOW",  "0.03"))
 
 INSTRUMENT = "XAU_USD"
-STATE_FILE = "bot_state.json"
-TRADE_LOG  = "trade_log.json"
+STATE_FILE = "gold_bot_state.json"
+TRADE_LOG  = "gold_trade_log.json"
 
 # ── Strategy constants ────────────────────────────────────────────────────────
 SMA_LONG         = 20;  SMA_SHORT       = 200
