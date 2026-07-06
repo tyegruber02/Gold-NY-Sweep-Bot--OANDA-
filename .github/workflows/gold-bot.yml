@@ -31,10 +31,9 @@ jobs:
           OANDA_API_KEY:    ${{ secrets.OANDA_API_KEY }}
           OANDA_ACCOUNT_ID: ${{ secrets.OANDA_ACCOUNT_ID }}
           OANDA_ENV:        practice
-          GOLD_PAPER_MODE:  "true"
+          GOLD_PAPER_MODE:  "false"
           ACCOUNT_SIZE:     "100000"
-          RISK_HIGH:        "0.05"
-          RISK_LOW:         "0.03"
+          RISK_FLAT:        "0.15"
         run: python3 gold_bot.py
 
       - name: Commit state and trade log

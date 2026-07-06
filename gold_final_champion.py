@@ -9,20 +9,28 @@ Strategy Parameters (locked from 100+ backtests):
     • Asia window (17:00–01:00 ET): wait for price to wick beyond level and close back inside
     • Only the first qualifying sweep per session traded
     • Trend filter: LONG only when 4H price > SMA-20 | SHORT only when 4H price < SMA-200
-    • RSI(14) gate on entry bar: LONG ≤ 40 | SHORT ≥ 60
+    • RSI(14) gate on entry bar: LONG ≤ 40 | SHORT ≥ 65
     • Skip day if NY range < 1× ATR(14)
 
   Risk management:
     • Stop loss  : sweep wick extreme ± 0.15× ATR (tight, just beyond the trap)
-    • Take profit : 80% of NY session range back inside (min 1.5R, fallback 2R)
-    • Account     : $100,000
+    • TP1 (partial): 80% of NY session range (min 1.5R, fallback 2R) — close 30% of position
+    • TP2 (runner) : 200% of NY session range — run remaining 70% of position
+    • Runner stop  : moved to entry immediately when TP1 hit (worst case = $0 on runner)
+    • Account      : $100,000
 
-  Dynamic position sizing (confidence system):
-    • DEFAULT size : 5% risk ($5,000) — the baseline for high-conviction setups
-    • REDUCE to 3% ($3,000) if ANY of the following red flags are present:
-        ① Sweep occurs in the 20:00–22:00 ET dead zone (18.2% WR historically)
-        ② Entry candle body > 0.6× ATR (momentum continuation, not reversal)
-    • Trades with NEITHER flag keep 5% size (historical 67% WR on these)
+  Position sizing:
+    • 5% flat risk ($5,000) on every trade — clean and flagged alike
+    • Flagged detection (dead zone 20-22 ET / momentum bar >0.6× ATR) retained for BE only
+    • +$48K over 2yr vs dynamic 5%/3% system, with identical drawdown (-3.35% vs -3.31%)
+
+  Trailing stop (break-even protection):
+    • Clean trades   : hold to TP1/TP2 — no early trailing
+    • Flagged trades : move SL to entry once price reaches 1R profit (BE@1R)
+        → flagged = dead zone sweep OR entry body > 0.6× ATR
+        → worst case on flagged = $0 instead of -$5,000
+
+  Sizing history: dynamic 5%/3% → $284,642 | 5% flat → $332,637 (+$47,995, DD +0.04pp)
 """
 
 import warnings; warnings.filterwarnings("ignore")
@@ -38,18 +46,23 @@ ACCOUNT_SIZE  = 100_000
 # Strategy params
 SMA_LONG    = 20;  SMA_SHORT  = 200
 ATR_PERIOD  = 14;  ATR_SL_MULT = 0.15
-TP_PCT      = 0.80; MIN_TP_R   = 1.5; FALLBACK_RR = 2.0
-RSI_LONG_MAX = 40; RSI_SHORT_MIN = 60
+TP1_PCT     = 0.80  # partial exit: 80% of NY range
+TP2_PCT     = 2.00  # runner target: 200% of NY range
+TP_SPLIT    = 0.30  # fraction closed at TP1 (30%); 70% runs to TP2
+MIN_TP_R    = 1.5;  FALLBACK_RR = 2.0
+RSI_LONG_MAX = 40; RSI_SHORT_MIN = 65
 ASIA_OPEN = 17;   ASIA_CLOSE = 1
 
-# Risk tiers
-RISK_HIGH = 0.05   # 5% — clean setup, no red flags
-RISK_LOW  = 0.03   # 3% — at least one red flag present
+# Position sizing — flat 5% on all trades
+RISK_FLAT = 0.05
 
-# Red flag thresholds
+# Red flag thresholds (used for BE@1R gating only, not sizing)
 DEAD_ZONE_START = 20   # 20:00 ET
 DEAD_ZONE_END   = 22   # 22:00 ET
 BODY_PENALTY_THRESH = 0.6   # body > 0.6× ATR = momentum bar
+
+# Break-even trailing stop (flagged trades only)
+BE_TRIGGER_R = 1.0   # move SL to entry once unrealised profit reaches 1R
 
 
 # ---------------------------------------------------------------------------
@@ -87,17 +100,13 @@ def trading_date(ts):
 # CONFIDENCE SIZING
 # ---------------------------------------------------------------------------
 
-def get_risk(bar, bar_atr, ts):
-    """Return 5% or 3% based on red flag detection."""
+def get_flags(bar, bar_atr, ts):
+    """Detect red flags for BE@1R gating. Sizing is flat 5% regardless."""
     h = ts.hour
-    # Dead zone: 20:00–22:00 ET
-    in_dead_zone = (DEAD_ZONE_START <= h <= DEAD_ZONE_END)
-    # Momentum bar: large-body candle (continuation, not reversal)
-    body = abs(bar["close"] - bar["open"]) / bar_atr if bar_atr > 0 else 0
+    in_dead_zone    = (DEAD_ZONE_START <= h <= DEAD_ZONE_END)
+    body            = abs(bar["close"] - bar["open"]) / bar_atr if bar_atr > 0 else 0
     is_momentum_bar = body >= BODY_PENALTY_THRESH
-    if in_dead_zone or is_momentum_bar:
-        return RISK_LOW, in_dead_zone, is_momentum_bar
-    return RISK_HIGH, False, False
+    return in_dead_zone or is_momentum_bar, in_dead_zone, is_momentum_bar
 
 
 # ---------------------------------------------------------------------------
@@ -142,18 +151,19 @@ def run_backtest(df1h, df4h):
                     entry = bar["close"]; sl = bar["high"] + ba * ATR_SL_MULT
                     risk  = sl - entry
                     if risk <= 0: continue
-                    tp   = ny_high - TP_PCT * ny_rng
-                    tp_r = (entry - tp) / risk
-                    if tp_r < MIN_TP_R: tp = entry - risk*FALLBACK_RR; tp_r = FALLBACK_RR
-                    if tp_r < MIN_TP_R: continue
-                    rp, dead_z, mom_bar = get_risk(bar, ba, ts)
-                    # Rejection depth into range
+                    tp1  = ny_high - TP1_PCT * ny_rng
+                    tp1_r = (entry - tp1) / risk
+                    if tp1_r < MIN_TP_R: tp1 = entry - risk*FALLBACK_RR; tp1_r = FALLBACK_RR
+                    if tp1_r < MIN_TP_R: continue
+                    tp2  = ny_high - TP2_PCT * ny_rng
+                    flagged, dead_z, mom_bar = get_flags(bar, ba, ts)
                     reject_d = (ny_high - bar["close"]) / ny_rng if ny_rng > 0 else 0
                     trades.append(dict(
                         date=tdate, entry_ts=ts, direction="SHORT",
-                        entry=round(entry,2), sl=round(sl,2), tp=round(tp,2),
-                        tp_r=round(tp_r,2), risk=round(risk,2),
-                        risk_pct=rp, risk_pct_str=f"{rp*100:.0f}%",
+                        entry=round(entry,2), sl=round(sl,2),
+                        tp1=round(tp1,2), tp2=round(tp2,2), tp_r=round(tp1_r,2),
+                        risk=round(risk,2),
+                        risk_pct=RISK_FLAT, risk_pct_str="5%", flagged=flagged,
                         rsi=round(rv,1), wick_atr=round(wick_h,3),
                         body_atr=round(body_ratio,3), rng_ratio=round(rng_ratio,2),
                         reject_depth=round(reject_d,3),
@@ -172,17 +182,19 @@ def run_backtest(df1h, df4h):
                     entry = bar["close"]; sl = bar["low"] - ba * ATR_SL_MULT
                     risk  = entry - sl
                     if risk <= 0: continue
-                    tp   = ny_low + TP_PCT * ny_rng
-                    tp_r = (tp - entry) / risk
-                    if tp_r < MIN_TP_R: tp = entry + risk*FALLBACK_RR; tp_r = FALLBACK_RR
-                    if tp_r < MIN_TP_R: continue
-                    rp, dead_z, mom_bar = get_risk(bar, ba, ts)
+                    tp1  = ny_low + TP1_PCT * ny_rng
+                    tp1_r = (tp1 - entry) / risk
+                    if tp1_r < MIN_TP_R: tp1 = entry + risk*FALLBACK_RR; tp1_r = FALLBACK_RR
+                    if tp1_r < MIN_TP_R: continue
+                    tp2  = ny_low + TP2_PCT * ny_rng
+                    flagged, dead_z, mom_bar = get_flags(bar, ba, ts)
                     reject_d = (bar["close"] - ny_low) / ny_rng if ny_rng > 0 else 0
                     trades.append(dict(
                         date=tdate, entry_ts=ts, direction="LONG",
-                        entry=round(entry,2), sl=round(sl,2), tp=round(tp,2),
-                        tp_r=round(tp_r,2), risk=round(risk,2),
-                        risk_pct=rp, risk_pct_str=f"{rp*100:.0f}%",
+                        entry=round(entry,2), sl=round(sl,2),
+                        tp1=round(tp1,2), tp2=round(tp2,2), tp_r=round(tp1_r,2),
+                        risk=round(risk,2),
+                        risk_pct=RISK_FLAT, risk_pct_str="5%", flagged=flagged,
                         rsi=round(rv,1), wick_atr=round(wick_l,3),
                         body_atr=round(body_ratio,3), rng_ratio=round(rng_ratio,2),
                         reject_depth=round(reject_d,3),
@@ -200,30 +212,85 @@ def run_backtest(df1h, df4h):
 # ---------------------------------------------------------------------------
 
 def resolve(trades, df1h):
+    """
+    Partial TP: close TP_SPLIT (30%) at TP1, run remaining 70% to TP2.
+    Runner stop moves to entry once TP1 is hit.
+    BE@1R applied to flagged trades only (dead zone / momentum bar).
+    """
     if trades.empty: return trades
     bar_times = df1h.index.tolist()
     idx_map   = {ts: i for i, ts in enumerate(bar_times)}
     rows = []
     for _, t in trades.iterrows():
         if t["entry_ts"] not in idx_map: continue
-        start = idx_map[t["entry_ts"]] + 1
-        result, exit_price, bars_held = "OPEN", np.nan, 0
+        start      = idx_map[t["entry_ts"]] + 1
+        entry      = t["entry"]; risk = t["risk"]; direction = t["direction"]
+        sl         = t["sl"]
+        apply_be   = bool(t.get("flagged", False))
+        be_moved   = False
+        tp1_hit    = False
+        runner_sl  = sl
+        pnl_r      = 0.0
+        result     = "OPEN"; bars_held = 0
+
         for i in range(start, min(start+300, len(bar_times))):
             bar = df1h.iloc[i]; bars_held += 1
-            if t["direction"] == "LONG":
-                if bar["low"]  <= t["sl"]: result,exit_price="LOSS",t["sl"]; break
-                if bar["high"] >= t["tp"]: result,exit_price="WIN", t["tp"]; break
+            hi = bar["high"]; lo = bar["low"]
+
+            if not tp1_hit:
+                # BE@1R on flagged trades only
+                if apply_be and not be_moved:
+                    best_r = (hi-entry)/risk if direction=="LONG" else (entry-lo)/risk
+                    if best_r >= BE_TRIGGER_R:
+                        sl = entry; be_moved = True
+
+                if direction == "LONG":
+                    if lo <= sl:
+                        pnl_r = (sl - entry) / risk  # 0.0 if BE moved
+                        result = "BE" if be_moved else "LOSS"; break
+                    if hi >= t["tp1"]:
+                        tp1_r_actual = (t["tp1"] - entry) / risk
+                        pnl_r  += TP_SPLIT * tp1_r_actual
+                        tp1_hit = True; runner_sl = entry
+                else:
+                    if hi >= sl:
+                        pnl_r = (entry - sl) / risk  # 0.0 if BE moved
+                        result = "BE" if be_moved else "LOSS"; break
+                    if lo <= t["tp1"]:
+                        tp1_r_actual = (entry - t["tp1"]) / risk
+                        pnl_r  += TP_SPLIT * tp1_r_actual
+                        tp1_hit = True; runner_sl = entry
+
             else:
-                if bar["high"] >= t["sl"]: result,exit_price="LOSS",t["sl"]; break
-                if bar["low"]  <= t["tp"]: result,exit_price="WIN", t["tp"]; break
+                # Runner to TP2, stop at entry
+                runner_frac = 1.0 - TP_SPLIT
+                if direction == "LONG":
+                    if lo <= runner_sl:
+                        pnl_r += runner_frac * (runner_sl - entry) / risk  # = 0
+                        result = "PARTIAL"; break
+                    if hi >= t["tp2"]:
+                        pnl_r += runner_frac * (t["tp2"] - entry) / risk
+                        result = "WIN"; break
+                else:
+                    if hi >= runner_sl:
+                        pnl_r += runner_frac * (entry - runner_sl) / risk  # = 0
+                        result = "PARTIAL"; break
+                    if lo <= t["tp2"]:
+                        pnl_r += runner_frac * (entry - t["tp2"]) / risk
+                        result = "WIN"; break
+
         if result == "OPEN":
-            exit_price = df1h.iloc[min(start+299,len(df1h)-1)]["close"]
-        pnl_r   = ((exit_price-t["entry"])/t["risk"] if t["direction"]=="LONG"
-                   else (t["entry"]-exit_price)/t["risk"])
-        pnl_usd = pnl_r * ACCOUNT_SIZE * t["risk_pct"]
-        rows.append({**t.to_dict(), "result":result, "exit_price":round(exit_price,2),
-                     "pnl_r":round(pnl_r,2), "pnl_usd":round(pnl_usd,0),
-                     "bars_held":bars_held})
+            last = df1h.iloc[min(start+299, len(df1h)-1)]["close"]
+            if tp1_hit:
+                runner_r = (last-entry)/risk if direction=="LONG" else (entry-last)/risk
+                pnl_r += (1-TP_SPLIT) * runner_r
+            else:
+                pnl_r = (last-entry)/risk if direction=="LONG" else (entry-last)/risk
+
+        pnl_usd = pnl_r * ACCOUNT_SIZE * RISK_FLAT
+        rows.append({**t.to_dict(), "result":result,
+                     "pnl_r":round(pnl_r,3), "pnl_usd":round(pnl_usd,0),
+                     "bars_held":bars_held, "be_triggered":be_moved, "tp1_hit":tp1_hit})
     return pd.DataFrame(rows)
 
 
@@ -236,10 +303,14 @@ def bar_chart(value, max_val, width=25, char="█"):
     return char * filled
 
 def report(trades):
-    closed = trades[trades["result"].isin(["WIN","LOSS"])].copy()
-    wins   = closed[closed["result"]=="WIN"]
-    losses = closed[closed["result"]=="LOSS"]
-    wr     = len(wins)/len(closed)*100
+    closed  = trades[trades["result"].isin(["WIN","LOSS","BE","PARTIAL"])].copy()
+    decisive= closed[closed["result"].isin(["WIN","LOSS","PARTIAL"])]
+    wins    = closed[closed["result"].isin(["WIN","PARTIAL"])]
+    full_wins=closed[closed["result"]=="WIN"]
+    partials= closed[closed["result"]=="PARTIAL"]
+    losses  = closed[closed["result"]=="LOSS"]
+    bes     = closed[closed["result"]=="BE"]
+    wr      = len(wins)/len(decisive)*100 if len(decisive) else 0
 
     equity = ACCOUNT_SIZE + closed["pnl_usd"].cumsum()
     peak   = equity.cummax()
@@ -250,42 +321,44 @@ def report(trades):
     final_eq   = ACCOUNT_SIZE + total_pnl
 
     pf  = wins["pnl_usd"].sum()/abs(losses["pnl_usd"].sum()) if len(losses) else 99
-    exp = (wr/100)*wins["pnl_r"].mean() + (1-wr/100)*losses["pnl_r"].mean()
+    exp = decisive["pnl_r"].mean()
 
-    # Streaks
+    # Streaks (decisive only)
     streaks=[]; cur=0
-    for r in closed["result"]:
-        cur=(cur+1 if cur>0 else 1) if r=="WIN" else (cur-1 if cur<0 else -1)
+    for r in decisive["result"]:
+        cur=(cur+1 if cur>0 else 1) if r in ("WIN","PARTIAL") else (cur-1 if cur<0 else -1)
         streaks.append(cur)
     max_ws = max((s for s in streaks if s>0), default=0)
     max_ls = abs(min((s for s in streaks if s<0), default=0))
 
-    # Confidence tiers
-    hi = closed[closed["risk_pct"]==RISK_HIGH]
-    lo = closed[closed["risk_pct"]==RISK_LOW]
-    hi_wins = hi[hi["result"]=="WIN"]; lo_wins = lo[lo["result"]=="WIN"]
-    hi_wr = len(hi_wins)/len(hi)*100 if len(hi) else 0
-    lo_wr = len(lo_wins)/len(lo)*100 if len(lo) else 0
+    # Flagged vs clean breakdown
+    clean_dec   = decisive[decisive["flagged"]==False]
+    flagged_dec = decisive[decisive["flagged"]==True]
+    clean_wins  = clean_dec[clean_dec["result"].isin(["WIN","PARTIAL"])]
+    flagged_wins= flagged_dec[flagged_dec["result"].isin(["WIN","PARTIAL"])]
+    clean_wr    = len(clean_wins)/len(clean_dec)*100   if len(clean_dec)   else 0
+    flagged_wr  = len(flagged_wins)/len(flagged_dec)*100 if len(flagged_dec) else 0
 
     W = 66
     print("═"*W)
     print("  GOLD XAU/USD — NY SWEEP REVERSAL  ▪  FINAL CHAMPION BACKTEST")
-    print("  ICT Liquidity Sweep + Dynamic Confidence Position Sizing")
+    print("  ICT Liquidity Sweep | 5% Flat Risk | Partial TP 30/70")
     print("═"*W)
     print(f"  Account        : ${ACCOUNT_SIZE:>10,.0f}")
     print(f"  Period         : {closed['date'].min().date()} → {closed['date'].max().date()}")
     print(f"  Data           : GC=F (Gold Futures), 1H bars, 730 days")
     print(f"  Strategy       : NY Session High/Low Sweep Reversal (Asia session)")
-    print(f"  Filters        : SMA 20/200 trend  |  RSI 40/60 gate  |  ATR stop")
-    print(f"  Position size  : 5% (clean) → 3% (red flag: dead zone or momentum bar)")
+    print(f"  Filters        : SMA 20/200 trend  |  RSI 40/65 gate  |  ATR stop")
+    print(f"  Position size  : {RISK_FLAT*100:.0f}% flat (all trades)")
     print("─"*W)
 
     print(f"\n{'  PERFORMANCE SUMMARY':}")
     print("─"*W)
-    print(f"  Total trades       : {len(closed)}   ({len(wins)} wins / {len(losses)} losses)")
-    print(f"  Win rate           : {wr:.1f}%")
+    print(f"  Total trades       : {len(closed)}  ({len(full_wins)}W / {len(partials)}P / {len(losses)}L / {len(bes)}BE)")
+    print(f"  Win rate (decisive): {wr:.1f}%  (W+PARTIAL vs L  |  BE excluded)")
     print(f"  Profit factor      : {pf:.2f}×")
-    print(f"  Expectancy         : {exp:+.3f}R per trade")
+    print(f"  Expectancy         : {exp:+.3f}R per decisive trade")
+    print(f"  Partial TP split   : {TP_SPLIT*100:.0f}% at TP1 (80% NY range)  /  {(1-TP_SPLIT)*100:.0f}% runner to TP2 (200% NY range)")
     print(f"  Total P&L          : ${total_pnl:+,.0f}  ({total_pnl/ACCOUNT_SIZE*100:+.1f}% account return)")
     print(f"  Final equity       : ${final_eq:,.0f}")
     print(f"  Max drawdown       : {max_dd:.2f}%  (${max_dd_usd:,.0f})")
@@ -305,31 +378,33 @@ def report(trades):
     print(f"  Avg hold (bars)    : {closed['bars_held'].mean():.1f} hrs")
     print("─"*W)
 
-    print(f"\n  DYNAMIC POSITION SIZING — CONFIDENCE TIER BREAKDOWN")
+    print(f"\n  SIGNAL QUALITY BREAKDOWN  (5% flat on both — BE@1R on flagged only)")
     print("─"*W)
+    clean_all   = closed[closed["flagged"]==False]
+    flagged_all = closed[closed["flagged"]==True]
+    dz  = decisive[decisive["dead_zone"]==True]
+    mb  = decisive[decisive["momentum_bar"]==True]
+    dz_wr = len(dz[dz["result"].isin(["WIN","PARTIAL"])])/len(dz)*100 if len(dz) else 0
+    mb_wr = len(mb[mb["result"].isin(["WIN","PARTIAL"])])/len(mb)*100 if len(mb) else 0
     print(f"  ┌─────────────────────────┬────────┬──────────┬──────────┬──────────────┐")
-    print(f"  │ Tier                    │ Trades │ Win Rate │ Avg P&L  │ Total P&L    │")
+    print(f"  │ Group                   │ Trades │ Win Rate │ Avg P&L  │ Total P&L    │")
     print(f"  ├─────────────────────────┼────────┼──────────┼──────────┼──────────────┤")
-    if len(hi):
-        print(f"  │ 5% — No red flags       │ {len(hi):>6} │  {hi_wr:>5.1f}%  │ ${hi['pnl_usd'].mean():>+7,.0f} │ ${hi['pnl_usd'].sum():>+11,.0f} │")
-    if len(lo):
-        lo_dz  = lo[lo["dead_zone"]==True]
-        lo_mb  = lo[lo["momentum_bar"]==True]
-        lo_dz_wr = len(lo_dz[lo_dz["result"]=="WIN"])/len(lo_dz)*100 if len(lo_dz) else 0
-        lo_mb_wr = len(lo_mb[lo_mb["result"]=="WIN"])/len(lo_mb)*100 if len(lo_mb) else 0
-        print(f"  │ 3% — At least 1 flag    │ {len(lo):>6} │  {lo_wr:>5.1f}%  │ ${lo['pnl_usd'].mean():>+7,.0f} │ ${lo['pnl_usd'].sum():>+11,.0f} │")
-        print(f"  │   ↳ Dead zone 20-22 ET  │ {len(lo_dz):>6} │  {lo_dz_wr:>5.1f}%  │          │              │")
-        print(f"  │   ↳ Momentum bar >0.6×  │ {len(lo_mb):>6} │  {lo_mb_wr:>5.1f}%  │          │              │")
+    if len(clean_dec):
+        print(f"  │ Clean (no flags)        │ {len(clean_dec):>6} │  {clean_wr:>5.1f}%  │ ${clean_all['pnl_usd'].mean():>+7,.0f} │ ${clean_all['pnl_usd'].sum():>+11,.0f} │")
+    if len(flagged_dec):
+        print(f"  │ Flagged (≥1 red flag)   │ {len(flagged_dec):>6} │  {flagged_wr:>5.1f}%  │ ${flagged_all['pnl_usd'].mean():>+7,.0f} │ ${flagged_all['pnl_usd'].sum():>+11,.0f} │")
+        print(f"  │   ↳ Dead zone 20-22 ET  │ {len(dz):>6} │  {dz_wr:>5.1f}%  │          │              │")
+        print(f"  │   ↳ Momentum bar >0.6×  │ {len(mb):>6} │  {mb_wr:>5.1f}%  │          │              │")
     print(f"  └─────────────────────────┴────────┴──────────┴──────────┴──────────────┘")
-    print(f"\n  Average risk per trade : {closed['risk_pct'].mean()*100:.2f}%  (${closed['risk_pct'].mean()*ACCOUNT_SIZE:,.0f})")
+    print(f"\n  Risk per trade : {RISK_FLAT*100:.0f}% flat  (${RISK_FLAT*ACCOUNT_SIZE:,.0f} per trade)")
     print("─"*W)
 
     print(f"\n  DIRECTIONAL BREAKDOWN")
     print("─"*W)
     for d in ["LONG","SHORT"]:
-        sub = closed[closed["direction"]==d]
+        sub = decisive[decisive["direction"]==d]
         if sub.empty: continue
-        sw  = sub[sub["result"]=="WIN"]
+        sw  = sub[sub["result"].isin(["WIN","PARTIAL"])]
         wr2 = len(sw)/len(sub)*100 if len(sub) else 0
         pf2 = (sw["pnl_usd"].sum()/abs(sub[sub["result"]=="LOSS"]["pnl_usd"].sum())
                if len(sub[sub["result"]=="LOSS"]) else 99)
@@ -368,7 +443,7 @@ def report(trades):
 
     print(f"\n  FULL TRADE LOG")
     print("─"*W)
-    cols = ["date","direction","risk_pct_str","red_flag","entry","sl","tp",
+    cols = ["date","direction","risk_pct_str","red_flag","entry","sl","tp1","tp2",
             "tp_r","rsi","wick_atr","body_atr","rng_ratio","hour_et","result","pnl_r","pnl_usd"]
     display = closed[[c for c in cols if c in closed.columns]].copy()
     display.columns = [c.replace("risk_pct_str","risk").replace("wick_atr","wick×")
@@ -381,12 +456,14 @@ def report(trades):
     print("─"*W)
     print(f"  Entry : NY session high/low swept by Asia session bar (wick beyond, close inside)")
     print(f"  Trend : 4H SMA-20 for LONG  |  4H SMA-200 for SHORT")
-    print(f"  RSI   : Entry bar RSI ≤ 40 (LONG)  |  ≥ 60 (SHORT)")
+    print(f"  RSI   : Entry bar RSI ≤ 40 (LONG)  |  ≥ 65 (SHORT)")
     print(f"  Stop  : Sweep wick + 0.15× ATR beyond the level")
-    print(f"  Target: 80% of NY session range (min 1.5R)")
-    print(f"  Size  : 5% if no red flags  |  3% if dead zone OR momentum bar")
-    print(f"    Red flag ①  Dead zone   : sweep hour 20:00–22:00 ET → historically 18% WR")
-    print(f"    Red flag ②  Momentum bar: entry body > 0.6× ATR  → historically 20% WR")
+    print(f"  Target: TP1 = 80% NY range (close {TP_SPLIT*100:.0f}%)  |  TP2 = 200% NY range (run {(1-TP_SPLIT)*100:.0f}%)")
+    print(f"  Runner: stop moved to entry when TP1 hit — worst case on runner = $0")
+    print(f"  Size  : {RISK_FLAT*100:.0f}% flat on all trades")
+    print(f"  Trail : clean trades → hold to TP1/TP2  |  flagged trades → BE@1R before TP1")
+    print(f"    Flagged ①  Dead zone   : sweep hour 20:00–22:00 ET")
+    print(f"    Flagged ②  Momentum bar: entry body > 0.6× ATR")
     print("═"*W)
 
     return closed
