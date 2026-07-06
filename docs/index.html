@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gold NY-Sweep Bot — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0d0d0d;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.04em; color: #fff; }
+    h2 { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #666; margin-bottom: 12px; }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 12px; }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e88;
+      animation: pulse 2s infinite;
+    }
+    .status-dot.warn { background: #f59e0b; box-shadow: 0 0 6px #f59e0b88; }
+    .status-dot.error { background: #ef4444; box-shadow: 0 0 6px #ef444488; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .last-run { font-size: 0.75rem; color: #555; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      background: #141414;
+      border: 1px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .metric-value {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .metric-value.green { color: #22c55e; }
+    .metric-value.red   { color: #ef4444; }
+    .metric-value.amber { color: #f59e0b; }
+
+    .metric-label { font-size: 0.72rem; color: #555; }
+    .metric-sub   { font-size: 0.72rem; color: #444; margin-top: 2px; }
+
+    /* Equity chart */
+    #equityChart {
+      width: 100%;
+      height: 200px;
+      display: block;
+    }
+
+    /* Trade table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+    thead th {
+      text-align: left;
+      padding: 6px 10px;
+      color: #555;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1e1e1e;
+      white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid #181818; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 8px 10px; color: #aaa; white-space: nowrap; }
+    tbody td:first-child { color: #ddd; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+    .badge-win     { background: #14532d; color: #4ade80; }
+    .badge-partial { background: #1c3252; color: #60a5fa; }
+    .badge-loss    { background: #450a0a; color: #f87171; }
+    .badge-be      { background: #292524; color: #a8a29e; }
+    .badge-open    { background: #1c1917; color: #78716c; }
+    .badge-long    { color: #4ade80; }
+    .badge-short   { color: #f87171; }
+
+    /* GitHub Actions health */
+    .run-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #1a1a1a;
+      font-size: 0.75rem;
+    }
+    .run-row:last-child { border-bottom: none; }
+    .run-status { display: flex; align-items: center; gap: 8px; }
+    .run-icon { font-size: 0.85rem; }
+    .run-time { color: #555; font-size: 0.68rem; }
+
+    .pace-bar-bg {
+      height: 4px;
+      background: #1e1e1e;
+      border-radius: 2px;
+      margin-top: 8px;
+    }
+    .pace-bar-fill {
+      height: 4px;
+      border-radius: 2px;
+      background: #f59e0b;
+      transition: width 0.5s ease;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #444;
+      font-size: 0.8rem;
+    }
+
+    .refresh-btn {
+      background: #1e1e1e;
+      border: 1px solid #2a2a2a;
+      color: #888;
+      padding: 4px 12px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 0.72rem;
+      transition: background 0.15s;
+    }
+    .refresh-btn:hover { background: #252525; color: #ccc; }
+
+    @media (max-width: 700px) {
+      .grid   { grid-template-columns: repeat(2, 1fr); }
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="status-dot" id="statusDot"></div>
+    <div>
+      <h1>Gold NY-Sweep Bot</h1>
+      <div class="last-run" id="lastRunLabel">Loading…</div>
+    </div>
+  </div>
+  <button class="refresh-btn" onclick="init()">↻ Refresh</button>
+</div>
+
+<!-- KPI row -->
+<div class="grid">
+  <div class="card">
+    <h2>Total P&amp;L</h2>
+    <div class="metric-value green" id="kpiPnl">—</div>
+    <div class="metric-sub" id="kpiRet">—</div>
+  </div>
+  <div class="card">
+    <h2>Win Rate</h2>
+    <div class="metric-value" id="kpiWr">—</div>
+    <div class="metric-sub" id="kpiWrNote">decisive only</div>
+  </div>
+  <div class="card">
+    <h2>Profit Factor</h2>
+    <div class="metric-value" id="kpiPf">—</div>
+    <div class="metric-sub" id="kpiExpect">—</div>
+  </div>
+  <div class="card">
+    <h2>Max Drawdown</h2>
+    <div class="metric-value" id="kpiDd">—</div>
+    <div class="metric-sub" id="kpiDdNote">from peak equity</div>
+  </div>
+</div>
+
+<!-- Equity chart + health -->
+<div class="grid-2">
+  <div class="card">
+    <h2>Equity Curve</h2>
+    <canvas id="equityChart"></canvas>
+  </div>
+  <div class="card">
+    <h2>Bot Health</h2>
+    <div id="healthRows"><div class="empty-state">Loading runs…</div></div>
+  </div>
+</div>
+
+<!-- Trade breakdown -->
+<div class="grid-3">
+  <div class="card">
+    <h2>Trade Breakdown</h2>
+    <div id="breakdown"><div class="empty-state">No trades yet</div></div>
+  </div>
+  <div class="card">
+    <h2>Open Position</h2>
+    <div id="openPos"><div class="empty-state">No open position</div></div>
+  </div>
+  <div class="card">
+    <h2>Pace vs Champion</h2>
+    <div id="paceCard"><div class="empty-state">No trades yet</div></div>
+  </div>
+</div>
+
+<!-- Trade log -->
+<div class="card">
+  <h2>Trade Log</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Dir</th>
+          <th>Entry</th>
+          <th>SL</th>
+          <th>TP1</th>
+          <th>TP2</th>
+          <th>RSI</th>
+          <th>Flags</th>
+          <th>Result</th>
+          <th>P&amp;L (R)</th>
+          <th>P&amp;L ($)</th>
+        </tr>
+      </thead>
+      <tbody id="tradeRows">
+        <tr><td colspan="11" class="empty-state">No trades logged yet</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const REPO_OWNER  = "tyegruber02";
+const REPO_NAME   = "Gold-NY-Sweep-Bot--OANDA-";
+const ACCOUNT     = 100_000;
+const CHAMP       = { trades: 28, wr: 66.7, pnl: 998_325, dd: -4.32, pf: 12.09 };
+
+const raw = path =>
+  `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${path}`;
+const api = path =>
+  `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/${path}`;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt  = n => n >= 0 ? `+$${n.toLocaleString("en-US",{maximumFractionDigits:0})}` : `-$${Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0})}`;
+const fmtR = n => (n >= 0 ? "+" : "") + n.toFixed(2) + "R";
+const fmtP = n => (n >= 0 ? "+" : "") + n.toFixed(1) + "%";
+const ago  = iso => {
+  const d = (Date.now() - new Date(iso)) / 1000;
+  if (d < 60)   return `${Math.round(d)}s ago`;
+  if (d < 3600) return `${Math.round(d/60)}m ago`;
+  if (d < 86400)return `${Math.round(d/3600)}h ago`;
+  return `${Math.round(d/86400)}d ago`;
+};
+
+// ── Fetch trade log ───────────────────────────────────────────────────────────
+async function fetchTrades() {
+  try {
+    const r = await fetch(raw("gold_trade_log.json") + "?t=" + Date.now());
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+
+// ── Fetch GH Actions runs ─────────────────────────────────────────────────────
+async function fetchRuns() {
+  try {
+    const r = await fetch(api("actions/runs?per_page=6"));
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d.workflow_runs || [];
+  } catch { return []; }
+}
+
+// ── Compute stats ─────────────────────────────────────────────────────────────
+function stats(trades) {
+  let equity = ACCOUNT, peak = ACCOUNT, maxDd = 0;
+  const curve = [ACCOUNT];
+  let wins = 0, losses = 0, bes = 0, partials = 0, opens = 0;
+  let grossWin = 0, grossLoss = 0;
+  let totalR = 0;
+
+  for (const t of trades) {
+    const pnl = t.pnl_usd ?? 0;
+    const r   = t.pnl_r   ?? 0;
+    const res = (t.result || "OPEN").toUpperCase();
+    if (res === "WIN")     { wins++;     grossWin  += pnl; }
+    if (res === "PARTIAL") { partials++; grossWin  += pnl; }
+    if (res === "LOSS")    { losses++;   grossLoss += Math.abs(pnl); }
+    if (res === "BE")      { bes++; }
+    if (res === "OPEN")    { opens++; }
+    if (res !== "OPEN") {
+      equity += pnl;
+      totalR += r;
+      curve.push(equity);
+      const dd = (equity - peak) / peak * 100;
+      if (equity > peak) peak = equity;
+      if (dd < maxDd) maxDd = dd;
+    }
+  }
+
+  const decisive = wins + partials + losses;
+  const wr  = decisive > 0 ? (wins + partials) / decisive * 100 : 0;
+  const pf  = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : 0;
+  const pnl = equity - ACCOUNT;
+  const ret = pnl / ACCOUNT * 100;
+
+  return { equity, curve, pnl, ret, wr, pf, maxDd, totalR, decisive,
+           wins, losses, bes, partials, opens, grossWin, grossLoss };
+}
+
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+function renderKPIs(s) {
+  const pnlEl = $("kpiPnl");
+  pnlEl.textContent = fmt(s.pnl);
+  pnlEl.className = "metric-value " + (s.pnl >= 0 ? "green" : "red");
+  $("kpiRet").textContent = fmtP(s.ret) + " account return";
+
+  $("kpiWr").textContent = s.decisive > 0 ? s.wr.toFixed(1) + "%" : "—";
+  $("kpiWrNote").textContent = `${s.decisive} decisive trades`;
+
+  $("kpiPf").textContent = s.decisive > 0
+    ? (s.pf === Infinity ? "∞" : s.pf.toFixed(2) + "×") : "—";
+  $("kpiExpect").textContent = s.decisive > 0
+    ? fmtR(s.totalR / s.decisive) + " per trade" : "—";
+
+  const ddEl = $("kpiDd");
+  ddEl.textContent = s.decisive > 0 ? s.maxDd.toFixed(2) + "%" : "—";
+  ddEl.className = "metric-value " + (s.maxDd < -10 ? "red" : s.maxDd < -5 ? "amber" : "green");
+}
+
+// ── Render equity chart ───────────────────────────────────────────────────────
+function renderChart(curve) {
+  const canvas = $("equityChart");
+  const ctx    = canvas.getContext("2d");
+  const dpr    = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  ctx.scale(dpr, dpr);
+
+  if (curve.length < 2) {
+    ctx.fillStyle = "#333";
+    ctx.font = "13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("No closed trades yet", W / 2, H / 2);
+    return;
+  }
+
+  const min = Math.min(...curve) * 0.998;
+  const max = Math.max(...curve) * 1.002;
+  const pad = { t: 10, r: 10, b: 24, l: 60 };
+  const cw  = W - pad.l - pad.r;
+  const ch  = H - pad.t - pad.b;
+
+  const px = i  => pad.l + (i / (curve.length - 1)) * cw;
+  const py = v  => pad.t + (1 - (v - min) / (max - min)) * ch;
+
+  // Grid lines
+  ctx.strokeStyle = "#1e1e1e";
+  ctx.lineWidth   = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.t + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cw, y); ctx.stroke();
+    const val = max - ((max - min) / 4) * i;
+    ctx.fillStyle = "#444";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("$" + Math.round(val / 1000) + "K", pad.l - 6, y + 3);
+  }
+
+  // Baseline (account start)
+  const baseY = py(ACCOUNT);
+  ctx.strokeStyle = "#2a2a2a";
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(pad.l, baseY); ctx.lineTo(pad.l + cw, baseY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Fill
+  const grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+  grad.addColorStop(0, "#22c55e22");
+  grad.addColorStop(1, "#22c55e00");
+  ctx.beginPath();
+  ctx.moveTo(px(0), py(curve[0]));
+  curve.forEach((v, i) => ctx.lineTo(px(i), py(v)));
+  ctx.lineTo(px(curve.length - 1), pad.t + ch);
+  ctx.lineTo(px(0), pad.t + ch);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = "#22c55e";
+  ctx.lineWidth   = 2;
+  curve.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+  ctx.stroke();
+
+  // Dots
+  curve.forEach((v, i) => {
+    ctx.beginPath();
+    ctx.arc(px(i), py(v), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#22c55e";
+    ctx.fill();
+  });
+}
+
+// ── Render health ─────────────────────────────────────────────────────────────
+function renderHealth(runs) {
+  const el = $("healthRows");
+  if (!runs.length) { el.innerHTML = '<div class="empty-state">Could not load runs</div>'; return; }
+
+  const dot = $("statusDot");
+  const last = runs[0];
+  const ok   = last.conclusion === "success";
+  const running = last.status === "in_progress";
+
+  if (running) { dot.className = "status-dot warn"; }
+  else if (ok)  { dot.className = "status-dot"; }
+  else          { dot.className = "status-dot error"; }
+
+  $("lastRunLabel").textContent = "Last run " + ago(last.updated_at);
+
+  el.innerHTML = runs.map(r => {
+    const icon = r.status === "in_progress" ? "🔄"
+      : r.conclusion === "success" ? "✅"
+      : r.conclusion === "failure" ? "❌" : "⚪";
+    return `
+      <div class="run-row">
+        <div class="run-status">
+          <span class="run-icon">${icon}</span>
+          <span>${r.conclusion === "success" ? "Passed" : r.status === "in_progress" ? "Running" : r.conclusion || "Skipped"}</span>
+        </div>
+        <span class="run-time">${ago(r.updated_at)}</span>
+      </div>`;
+  }).join("");
+}
+
+// ── Render breakdown ──────────────────────────────────────────────────────────
+function renderBreakdown(s, total) {
+  if (total === 0) { $("breakdown").innerHTML = '<div class="empty-state">No trades yet</div>'; return; }
+  $("breakdown").innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:0.8rem;">
+      <div style="display:flex;justify-content:space-between"><span style="color:#4ade80">● WIN</span><span>${s.wins}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#60a5fa">● PARTIAL</span><span>${s.partials}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#a8a29e">● BE</span><span>${s.bes}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#f87171">● LOSS</span><span>${s.losses}</span></div>
+      ${s.opens ? `<div style="display:flex;justify-content:space-between"><span style="color:#78716c">● OPEN</span><span>${s.opens}</span></div>` : ""}
+      <div style="border-top:1px solid #1e1e1e;padding-top:8px;display:flex;justify-content:space-between;color:#666"><span>Total</span><span>${total}</span></div>
+    </div>`;
+}
+
+// ── Render open position ──────────────────────────────────────────────────────
+function renderOpen(trades) {
+  const open = trades.filter(t => (t.result || "OPEN").toUpperCase() === "OPEN");
+  if (!open.length) { $("openPos").innerHTML = '<div class="empty-state">No open position</div>'; return; }
+  const t = open[open.length - 1];
+  const dir = t.direction || "—";
+  const col = dir === "LONG" ? "#4ade80" : "#f87171";
+  $("openPos").innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:0.78rem;">
+      <div style="font-size:1.1rem;font-weight:700;color:${col}">${dir} XAU/USD</div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#555">Entry</span><span>${t.entry?.toFixed(2) ?? "—"}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#555">Stop</span><span style="color:#f87171">${t.sl?.toFixed(2) ?? "—"}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#555">TP1 (30%)</span><span style="color:#4ade80">${t.tp1?.toFixed(2) ?? "—"}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#555">TP2 (70%)</span><span style="color:#4ade80">${t.tp2?.toFixed(2) ?? "—"}</span></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#555">Risk</span><span>${((t.risk_pct ?? 0.15) * 100).toFixed(0)}%</span></div>
+      ${t.red_flags?.length ? `<div style="color:#f59e0b;font-size:0.68rem">⚠ ${t.red_flags.join(", ")}</div>` : ""}
+    </div>`;
+}
+
+// ── Render pace ───────────────────────────────────────────────────────────────
+function renderPace(s) {
+  if (s.decisive === 0) { $("paceCard").innerHTML = '<div class="empty-state">No trades yet</div>'; return; }
+  const pct = Math.min(1, s.decisive / CHAMP.trades);
+  const scaledPnl = CHAMP.pnl * pct;
+  const ahead = s.pnl - scaledPnl;
+  const aheadCol = ahead >= 0 ? "#22c55e" : "#ef4444";
+
+  $("paceCard").innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;font-size:0.78rem;">
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:#555">Trades</span>
+        <span>${s.decisive} / ${CHAMP.trades}</span>
+      </div>
+      <div class="pace-bar-bg"><div class="pace-bar-fill" style="width:${pct*100}%"></div></div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:#555">Expected P&L</span>
+        <span>${fmt(Math.round(scaledPnl))}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:#555">Actual P&L</span>
+        <span>${fmt(s.pnl)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid #1e1e1e;padding-top:8px">
+        <span style="color:#555">vs Champion</span>
+        <span style="color:${aheadCol};font-weight:700">${ahead >= 0 ? "+" : ""}${fmt(Math.round(ahead))}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="color:#555">WR</span>
+        <span>${s.wr.toFixed(1)}% <span style="color:#555">/ ${CHAMP.wr}% champ</span></span>
+      </div>
+    </div>`;
+}
+
+// ── Render trade table ────────────────────────────────────────────────────────
+function renderTable(trades) {
+  if (!trades.length) return;
+  const rows = [...trades].reverse().map(t => {
+    const res = (t.result || "OPEN").toUpperCase();
+    const badgeClass = { WIN:"badge-win", PARTIAL:"badge-partial", LOSS:"badge-loss", BE:"badge-be", OPEN:"badge-open" }[res] || "badge-open";
+    const dirClass   = t.direction === "LONG" ? "badge-long" : "badge-short";
+    const pnl        = t.pnl_usd ?? null;
+    const r          = t.pnl_r   ?? null;
+    const flags      = t.red_flags?.length ? t.red_flags.join(", ") : "—";
+    const date       = t.timestamp ? t.timestamp.slice(0, 10) : "—";
+    return `<tr>
+      <td>${date}</td>
+      <td class="${dirClass}" style="font-weight:700">${t.direction ?? "—"}</td>
+      <td>${t.entry?.toFixed(2) ?? "—"}</td>
+      <td>${t.sl?.toFixed(2) ?? "—"}</td>
+      <td>${t.tp1?.toFixed(2) ?? "—"}</td>
+      <td>${t.tp2?.toFixed(2) ?? "—"}</td>
+      <td>${t.rsi ?? "—"}</td>
+      <td style="color:#f59e0b">${flags}</td>
+      <td><span class="badge ${badgeClass}">${res}</span></td>
+      <td style="color:${r === null ? "#555" : r >= 0 ? "#4ade80" : "#f87171"}">${r !== null ? fmtR(r) : "—"}</td>
+      <td style="color:${pnl === null ? "#555" : pnl >= 0 ? "#4ade80" : "#f87171"}">${pnl !== null ? fmt(pnl) : "—"}</td>
+    </tr>`;
+  }).join("");
+  $("tradeRows").innerHTML = rows;
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+async function init() {
+  const [trades, runs] = await Promise.all([fetchTrades(), fetchRuns()]);
+  const s = stats(trades);
+
+  renderKPIs(s);
+  renderChart(s.curve);
+  renderHealth(runs);
+  renderBreakdown(s, trades.length);
+  renderOpen(trades);
+  renderPace(s);
+  renderTable(trades);
+}
+
+init();
+// Auto-refresh every 5 minutes
+setInterval(init, 5 * 60 * 1000);
+</script>
+</body>
+</html>
