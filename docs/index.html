@@ -192,13 +192,32 @@
   <button class="refresh-btn" onclick="init()">↻ Refresh</button>
 </div>
 
-<!-- KPI row -->
+<!-- Balance / Equity row -->
 <div class="grid">
   <div class="card">
-    <h2>Total P&amp;L</h2>
-    <div class="metric-value green" id="kpiPnl">—</div>
-    <div class="metric-sub" id="kpiRet">—</div>
+    <h2>Starting Balance</h2>
+    <div class="metric-value" id="balStart">$100,000</div>
+    <div class="metric-sub">account funded</div>
   </div>
+  <div class="card">
+    <h2>Current Equity</h2>
+    <div class="metric-value green" id="balEquity">—</div>
+    <div class="metric-sub" id="balEquitySub">from closed trades</div>
+  </div>
+  <div class="card">
+    <h2>Peak Equity</h2>
+    <div class="metric-value" id="balPeak">—</div>
+    <div class="metric-sub" id="balPeakSub">highest point reached</div>
+  </div>
+  <div class="card">
+    <h2>Total P&amp;L</h2>
+    <div class="metric-value green" id="balPnl">—</div>
+    <div class="metric-sub" id="balRet">—</div>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div class="grid">
   <div class="card">
     <h2>Win Rate</h2>
     <div class="metric-value" id="kpiWr">—</div>
@@ -213,6 +232,11 @@
     <h2>Max Drawdown</h2>
     <div class="metric-value" id="kpiDd">—</div>
     <div class="metric-sub" id="kpiDdNote">from peak equity</div>
+  </div>
+  <div class="card">
+    <h2>Total Trades</h2>
+    <div class="metric-value" id="kpiTrades">—</div>
+    <div class="metric-sub" id="kpiTradesSub">—</div>
   </div>
 </div>
 
@@ -352,13 +376,25 @@ function stats(trades) {
            wins, losses, bes, partials, opens, grossWin, grossLoss };
 }
 
-// ── Render KPIs ───────────────────────────────────────────────────────────────
-function renderKPIs(s) {
-  const pnlEl = $("kpiPnl");
+// ── Render Balance / Equity ───────────────────────────────────────────────────
+function renderBalance(s) {
+  const peak = Math.max(...s.curve);
+
+  $("balEquity").textContent = "$" + Math.round(s.equity).toLocaleString("en-US");
+  $("balEquity").className = "metric-value " + (s.equity >= ACCOUNT ? "green" : "red");
+  $("balEquitySub").textContent = s.decisive > 0 ? `${s.decisive} closed trades` : "no closed trades yet";
+
+  $("balPeak").textContent = "$" + Math.round(peak).toLocaleString("en-US");
+  $("balPeakSub").textContent = peak > ACCOUNT ? fmtP((peak - ACCOUNT) / ACCOUNT * 100) + " above start" : "at starting balance";
+
+  const pnlEl = $("balPnl");
   pnlEl.textContent = fmt(s.pnl);
   pnlEl.className = "metric-value " + (s.pnl >= 0 ? "green" : "red");
-  $("kpiRet").textContent = fmtP(s.ret) + " account return";
+  $("balRet").textContent = fmtP(s.ret) + " account return";
+}
 
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+function renderKPIs(s) {
   $("kpiWr").textContent = s.decisive > 0 ? s.wr.toFixed(1) + "%" : "—";
   $("kpiWrNote").textContent = `${s.decisive} decisive trades`;
 
@@ -370,6 +406,9 @@ function renderKPIs(s) {
   const ddEl = $("kpiDd");
   ddEl.textContent = s.decisive > 0 ? s.maxDd.toFixed(2) + "%" : "—";
   ddEl.className = "metric-value " + (s.maxDd < -10 ? "red" : s.maxDd < -5 ? "amber" : "green");
+
+  $("kpiTrades").textContent = s.decisive + s.bes + s.opens > 0 ? s.decisive + s.bes + s.opens : "—";
+  $("kpiTradesSub").textContent = `${s.wins}W / ${s.partials}P / ${s.losses}L / ${s.bes}BE`;
 }
 
 // ── Render equity chart ───────────────────────────────────────────────────────
@@ -579,6 +618,7 @@ async function init() {
   const [trades, runs] = await Promise.all([fetchTrades(), fetchRuns()]);
   const s = stats(trades);
 
+  renderBalance(s);
   renderKPIs(s);
   renderChart(s.curve);
   renderHealth(runs);
