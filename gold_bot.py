@@ -590,27 +590,42 @@ def main():
 
     client = oandapyV20.API(access_token=OANDA_API_KEY, environment=OANDA_ENV)
 
-    try:
-        r = accounts_ep.AccountSummary(OANDA_ACCOUNT_ID)
-        client.request(r)
-        balance = float(r.response["account"]["balance"])
-        log.info(f"  OANDA {OANDA_ENV} — Balance: ${balance:,.2f}")
-    except Exception as e:
-        log.error(f"  OANDA connection failed: {e}")
+    import time
+    balance = None
+    for attempt in range(1, 4):
+        try:
+            r = accounts_ep.AccountSummary(OANDA_ACCOUNT_ID)
+            client.request(r)
+            balance = float(r.response["account"]["balance"])
+            log.info(f"  OANDA {OANDA_ENV} — Balance: ${balance:,.2f}")
+            break
+        except Exception as e:
+            log.warning(f"  OANDA connection attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                time.sleep(10)
+    if balance is None:
+        log.error("  OANDA connection failed after 3 attempts — exiting")
         sys.exit(1)
 
     state = load_state()
 
-    try:
-        log.info("  Fetching XAU_USD candles…")
-        df1h = fetch_candles(client, "H1", count=300)
-        df4h = fetch_candles(client, "H4", count=300)
-        df1h = add_atr(df1h, ATR_PERIOD); df1h = add_rsi(df1h, ATR_PERIOD)
-        df4h = add_sma(df4h, SMA_LONG);   df4h = add_sma(df4h, SMA_SHORT)
-        log.info(f"  1H: {len(df1h)} bars  |  4H: {len(df4h)} bars  "
-                 f"|  Latest: {df1h.index[-1].strftime('%Y-%m-%d %H:%M ET')}")
-    except Exception as e:
-        log.error(f"  Failed to fetch candles: {e}")
+    df1h = df4h = None
+    for attempt in range(1, 4):
+        try:
+            log.info(f"  Fetching XAU_USD candles… (attempt {attempt}/3)")
+            df1h = fetch_candles(client, "H1", count=300)
+            df4h = fetch_candles(client, "H4", count=300)
+            df1h = add_atr(df1h, ATR_PERIOD); df1h = add_rsi(df1h, ATR_PERIOD)
+            df4h = add_sma(df4h, SMA_LONG);   df4h = add_sma(df4h, SMA_SHORT)
+            log.info(f"  1H: {len(df1h)} bars  |  4H: {len(df4h)} bars  "
+                     f"|  Latest: {df1h.index[-1].strftime('%Y-%m-%d %H:%M ET')}")
+            break
+        except Exception as e:
+            log.warning(f"  Candle fetch attempt {attempt}/3 failed: {e}")
+            if attempt < 3:
+                time.sleep(10)
+    if df1h is None:
+        log.error("  Failed to fetch candles after 3 attempts — exiting")
         save_state(state); sys.exit(1)
 
     # Check BE on any existing open flagged trade before looking for new signals
