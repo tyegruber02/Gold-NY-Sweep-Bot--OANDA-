@@ -511,7 +511,7 @@ function renderHealth(runs) {
       <div class="run-row">
         <div class="run-status">
           <span class="run-icon">${icon}</span>
-          <span>${r.conclusion === "success" ? "Passed" : r.status === "in_progress" ? "Running" : r.conclusion || "Skipped"}</span>
+          <span>${r.conclusion === "success" ? "Passed" : r.status === "in_progress" ? "Running" : r.status === "queued" ? "Queued" : r.conclusion || "Skipped"}</span>
         </div>
         <span class="run-time">${ago(r.updated_at)}</span>
       </div>`;
