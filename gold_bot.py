@@ -53,7 +53,7 @@ TRADE_LOG  = "gold_trade_log.json"
 # ── Strategy constants ────────────────────────────────────────────────────────
 SMA_LONG        = 20;  SMA_SHORT      = 200
 ATR_PERIOD      = 14;  ATR_SL_MULT    = 0.15
-TP1_PCT         = 0.80  # partial exit level: 80% of NY range
+TP1_PCT         = 0.90  # partial exit level: 90% of NY range (walk-forward optimised)
 TP2_PCT         = 2.00  # runner target: 200% of NY range
 TP_SPLIT        = 0.30  # 30% closes at TP1; 70% runs to TP2
 MIN_TP_R        = 1.5;  FALLBACK_RR = 2.0
