@@ -64,9 +64,6 @@ DEAD_ZONE_START = 20;  DEAD_ZONE_END  = 22
 BODY_THRESH     = 0.6
 MIN_NY_RANGE_ATR = 1.0
 BE_TRIGGER_R    = 1.0   # move SL to entry once flagged trade reaches 1R profit
-# Seasonal filter: Jan/Feb/Sep/Oct have 0 wins across 34 trades in 8yr backtest
-# Walk-forward validated: improves OOS exp from +0.197R → +0.850R avg across 13 windows
-SKIP_MONTHS     = {1, 2, 9, 10}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -486,10 +483,6 @@ def check_signal(df1h, df4h, state):
 
     if not is_asia_bar(ts_et):
         log.info(f"  Hour {ts_et.hour} ET — outside Asia session")
-        return None
-
-    if ts_et.month in SKIP_MONTHS:
-        log.info(f"  Month {ts_et.month} in seasonal skip list — no trades this month")
         return None
 
     if state.get("tdate") != tdate:
