@@ -33,7 +33,7 @@ jobs:
           OANDA_ENV:        practice
           GOLD_PAPER_MODE:  "false"
           ACCOUNT_SIZE:     "100000"
-          RISK_FLAT:        "0.15"
+          RISK_FLAT:        "0.10"
         run: python3 gold_bot.py
 
       - name: Commit state and trade log

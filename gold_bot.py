@@ -44,7 +44,7 @@ OANDA_ACCOUNT_ID = os.environ.get("OANDA_ACCOUNT_ID", "")
 OANDA_ENV        = os.environ.get("OANDA_ENV", "practice")
 PAPER_MODE       = os.environ.get("GOLD_PAPER_MODE", "true").lower() == "true"
 ACCOUNT_SIZE     = float(os.environ.get("ACCOUNT_SIZE", "100000"))
-RISK_FLAT        = float(os.environ.get("RISK_FLAT", "0.15"))
+RISK_FLAT        = float(os.environ.get("RISK_FLAT", "0.10"))
 
 INSTRUMENT = "XAU_USD"
 STATE_FILE = "gold_bot_state.json"
