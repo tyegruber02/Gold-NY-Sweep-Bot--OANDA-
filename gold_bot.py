@@ -57,7 +57,7 @@ TP1_PCT         = 0.90  # partial exit level: 90% of NY range (walk-forward opti
 TP2_PCT         = 2.00  # runner target: 200% of NY range
 TP_SPLIT        = 0.30  # 30% closes at TP1; 70% runs to TP2
 MIN_TP_R        = 1.5;  FALLBACK_RR = 2.0
-RSI_LONG_MAX    = 40;  RSI_SHORT_MIN  = 65
+RSI_LONG_MAX    = 35;  RSI_SHORT_MIN  = 65  # RSI_LONG_MAX tightened from 40 (walk-forward optimised)
 NY_OPEN_H       = 8;   NY_CLOSE_H     = 17
 ASIA_OPEN_H     = 17;  ASIA_CLOSE_H   = 1
 DEAD_ZONE_START = 20;  DEAD_ZONE_END  = 22
