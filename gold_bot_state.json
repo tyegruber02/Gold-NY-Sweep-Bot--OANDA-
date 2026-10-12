@@ -1,8 +1,8 @@
 {
-  "tdate": "2026-10-11",
-  "ny_high": null,
-  "ny_low": null,
-  "ny_rng": null,
+  "tdate": "2026-10-12",
+  "ny_high": 4175.59,
+  "ny_low": 4154.725,
+  "ny_rng": 20.86499999999978,
   "swept_high": false,
   "swept_low": false
 }
